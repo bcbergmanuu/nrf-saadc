@@ -38,7 +38,7 @@
 }
 
 
-extern void calibrate_and_start();
+extern void adc_calibrate_and_start();
 extern void adc_stop();
 
 #endif

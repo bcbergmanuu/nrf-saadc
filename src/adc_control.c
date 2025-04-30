@@ -10,10 +10,12 @@
 #include <nrfx_saadc.h>
 #include <nrfx_gpiote.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/drivers/gpio.h>                                                                                                                                                     
 #include "adc_control.h"
 #include "ble_send.h"
 
 LOG_MODULE_REGISTER(SAADC_MODULE, CONFIG_LOG_DEFAULT_LEVEL);
+const struct device *const gpio1_dev = DEVICE_DT_GET(DT_NODELABEL(gpio1));
 
 //K_HEAP_DEFINE(BUFFER,512);
 
@@ -97,14 +99,21 @@ NRFX_STATIC_ASSERT((INTERNAL_TIMER_CC >= 80UL ) && (INTERNAL_TIMER_CC <= 2047UL)
 
 
 
-int16_t result_items[MESSAGE_NUM] = {0};
+int powerup_iopin(){
+	return gpio_pin_set(gpio1_dev, 11, 1);
+}
 
+int powerdown_iopin() {
+	return gpio_pin_set(gpio1_dev, 11, 0);
+}
+
+int16_t result_items[MESSAGE_NUM] = {0};
 
 static bool continuereading = false;
 
 void adc_stop() {
     continuereading = false;
-   
+    powerdown_iopin();
 }
 
 static void saadc_handler(nrfx_saadc_evt_t const * p_event)
@@ -149,6 +158,8 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
             {                
                 result_items[i] = NRFX_SAADC_SAMPLE_GET(RESOLUTION, p_event->data.done.p_buffer, i);
             } 
+            SendBufferd(result_items, samples_number); //times 2 bc 16bit
+            
             LOG_INF("first item:%d", result_items[0]);
             break;
 
@@ -165,13 +176,14 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
 
 #define NRFX_SAADC_BB_CONFIG                                           \
 {                                                                               \
-    .oversampling      = NRF_SAADC_OVERSAMPLE_16X,                         \
+    .oversampling      = NRF_SAADC_OVERSAMPLE_256X,                         \
     .burst             = NRF_SAADC_BURST_DISABLED,                              \
     .internal_timer_cc = 0,                                                     \
     .start_on_end      = false,                                                 \
 }
 
-void calibrate_and_start() {
+
+void adc_calibrate_and_start() {
     continuereading = true;
     nrfx_err_t status;
     status = nrfx_saadc_init(NRFX_SAADC_DEFAULT_CONFIG_IRQ_PRIORITY);
@@ -198,6 +210,7 @@ void calibrate_and_start() {
     status = nrfx_saadc_offset_calibrate(saadc_handler);
     NRFX_ASSERT(status == NRFX_SUCCESS);
     
+    powerup_iopin();
 }
 
 /**
@@ -213,8 +226,11 @@ static int configureSAADC(void)
     
     LOG_INF("Starting nrfx_saadc");
     
-
-  
+    int err = 0;
+    err |= gpio_pin_configure(gpio1_dev, 11, GPIO_OUTPUT); 
+	if(err != 0) {
+		LOG_ERR("error configure output pin %d", err);
+	}		
 
     // nrfx_gpiote_t const gpiote_inst = NRFX_GPIOTE_INSTANCE(GPIOTE_INST_IDX);
     // status = nrfx_gpiote_init(&gpiote_inst, NRFX_GPIOTE_DEFAULT_CONFIG_IRQ_PRIORITY);

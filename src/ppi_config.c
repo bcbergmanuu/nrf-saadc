@@ -42,7 +42,7 @@ int ppi_init(void)
     
     NRF_GPIOTE->CONFIG[0] = GPIOTE_CONFIG_MODE_Task << GPIOTE_CONFIG_MODE_Pos |
                             GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos |
-                            4 << GPIOTE_CONFIG_PSEL_Pos | 
+                            4 << GPIOTE_CONFIG_PSEL_Pos | //pin 0. 4
                             GPIOTE_CONFIG_OUTINIT_Low << GPIOTE_CONFIG_OUTINIT_Pos;
                             
     NRF_TIMER1->PRESCALER = 0;
