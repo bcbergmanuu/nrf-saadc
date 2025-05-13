@@ -3,6 +3,7 @@
 
 #include <zephyr/kernel.h>
 
+extern struct k_mutex saadc_mutex;
 /**
  * @brief SAADC channel configuration for the single-ended mode with 3 us sample acquisition time.
  *        The 3 us acquisition time will work correctly when the source resistance of @p _pin_p input
@@ -20,11 +21,11 @@
  *
  * @sa nrfx_saadc_channel_t
  */
-#define SAADC_CHANNEL_SE_ACQ_40US(_pin_p, _pin_n, _index)        \
+#define SAADC_CHANNEL_SE_ACQ_40US(_pin_n, _pin_p, _index)        \
 {                                                       \
     .channel_config =                                   \
     {                                                   \
-        .resistor_p = NRF_SAADC_RESISTOR_DISABLED,      \
+        .resistor_p = NRF_SAADC_RESISTOR_VDD1_2,      \
         .resistor_n = NRF_SAADC_RESISTOR_DISABLED,      \
         .gain       = NRF_SAADC_GAIN1,                \
         .reference  = NRF_SAADC_REFERENCE_INTERNAL,     \

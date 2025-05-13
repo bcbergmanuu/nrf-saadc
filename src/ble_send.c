@@ -61,6 +61,9 @@ const struct bt_data ad[] = {
 // 	};
 // }
 
+void ppi_value_updated(struct k_work *work);
+void ble_notify_changed(struct k_work *work);
+
 BT_GATT_SERVICE_DEFINE(saadc_svc,
 	BT_GATT_PRIMARY_SERVICE(&saadc_general_prop),
 	
@@ -167,6 +170,8 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	LOG_INF("Disconnected (reason 0x%02x)\n", reason);
 	isConnected = false;
+	notify_ble_resp_on1 = false;
+	k_work_submit(&work_ble_notify_changed);
 }
 
 static void le_data_length_updated(struct bt_conn *conn, struct bt_conn_le_data_len_info *info) {

@@ -32,6 +32,8 @@ int read_uniqueidentifier(uint16_t *identifier) {
 }
 
 static int flash_set_suspend() {  
+	
+
 	int ret = pm_device_action_run(spi_flash_dev, PM_DEVICE_ACTION_SUSPEND);
 	if(ret) { 
 		LOG_ERR("could not suspend qspi flash device %d, %s", ret, spi_flash_dev->name);
@@ -45,13 +47,14 @@ static int flash_set_suspend() {
 	// 	return ret;
 	// }		
 	// LOG_INF("qspi turned off");
+	
 	return 0;
 }
 
 int init_external_storage(void) {	
 	LOG_INF("init storage");
     int rc = 0;	
-	
+	#ifdef CONFIG_BOARD_XIAO_BLE
 	spi_flash_dev = DEVICE_DT_GET(DT_ALIAS(spi_flash0));	
 	if (!device_is_ready(spi_flash_dev)) {
 		LOG_ERR("%s: device not ready.\n", spi_flash_dev->name);
@@ -69,6 +72,7 @@ int init_external_storage(void) {
 	}
 		
 	rc |= flash_set_suspend();	
+	#endif
 	return rc;
 }
 

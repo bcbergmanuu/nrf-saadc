@@ -7,15 +7,19 @@
 */
 
 #include <zephyr/kernel.h>
+#include "adc_control.h"
 #include <nrfx_saadc.h>
 #include <nrfx_gpiote.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/gpio.h>                                                                                                                                                     
-#include "adc_control.h"
+
 #include "ble_send.h"
 
 LOG_MODULE_REGISTER(SAADC_MODULE, CONFIG_LOG_DEFAULT_LEVEL);
+
+
 const struct device *const gpio1_dev = DEVICE_DT_GET(DT_NODELABEL(gpio1));
+struct k_mutex saadc_mutex;
 
 //K_HEAP_DEFINE(BUFFER,512);
 
@@ -46,7 +50,7 @@ const struct device *const gpio1_dev = DEVICE_DT_GET(DT_NODELABEL(gpio1));
 #define GPIOTE_INST_IDX 0
 
 /** @brief Symbol specifying GPIO pin used to test the functionality of SAADC. */
-#define OUT_GPIO_PIN LOOPBACK_PIN_1B
+//#define OUT_GPIO_PIN LOOPBACK_PIN_1B
 
 /** @brief Acquisition time [us] for source resistance <= 800 kOhm (see SAADC electrical specification). */
 #define ACQ_TIME_10K 40UL
@@ -72,9 +76,6 @@ const struct device *const gpio1_dev = DEVICE_DT_GET(DT_NODELABEL(gpio1));
 /** @brief Symbol specifying the size of singular sample buffer ( @ref m_sample_buffers ). */
 //#define BUFFER_SIZE 5UL //means 40Hz
 
-/** @brief Symbol specifying the resolution of the SAADC. */
-#define RESOLUTION NRF_SAADC_RESOLUTION_12BIT
-
 /** @brief SAADC channel configuration structure for single channel use. */
 static const nrfx_saadc_channel_t m_single_channel = SAADC_CHANNEL_SE_ACQ_40US(NRF_SAADC_INPUT_AIN0, NRF_SAADC_INPUT_AIN1, 0);
 
@@ -98,22 +99,15 @@ NRFX_STATIC_ASSERT((INTERNAL_TIMER_CC >= 80UL ) && (INTERNAL_TIMER_CC <= 2047UL)
  */
 
 
-
-int powerup_iopin(){
-	return gpio_pin_set(gpio1_dev, 11, 1);
-}
-
-int powerdown_iopin() {
-	return gpio_pin_set(gpio1_dev, 11, 0);
-}
-
 int16_t result_items[MESSAGE_NUM] = {0};
 
 static bool continuereading = false;
 
 void adc_stop() {
     continuereading = false;
-    powerdown_iopin();
+    
+    k_mutex_unlock(&saadc_mutex);  
+    nrfx_saadc_uninit();      
 }
 
 static void saadc_handler(nrfx_saadc_evt_t const * p_event)
@@ -165,8 +159,7 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
 
         case NRFX_SAADC_EVT_FINISHED:
             LOG_INF("SAADC event: FINISHED");
-            
-            nrfx_saadc_uninit();
+                           
             break;
 
         default:
@@ -179,14 +172,26 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
     .oversampling      = NRF_SAADC_OVERSAMPLE_256X,                         \
     .burst             = NRF_SAADC_BURST_DISABLED,                              \
     .internal_timer_cc = 0,                                                     \
-    .start_on_end      = false,                                                 \
+    .start_on_end      = false,\
 }
 
-
+ 
 void adc_calibrate_and_start() {
+    LOG_INF("adc_calibrate_and_start");
+    
+    if(k_mutex_lock(&saadc_mutex, K_MSEC(10)) != 0) {
+        
+        LOG_INF("mutex busy");
+        return;
+    };    
+    //enable_saadc_irq_runtime();
+
+    LOG_INF("mutex aquired");
+
     continuereading = true;
     nrfx_err_t status;
-    status = nrfx_saadc_init(NRFX_SAADC_DEFAULT_CONFIG_IRQ_PRIORITY);
+    status = nrfx_saadc_init(DT_IRQ(DT_NODELABEL(adc), priority));
+    //status = nrfx_saadc_init(NRFX_SAADC_DEFAULT_CONFIG_IRQ_PRIORITY);
     NRFX_ASSERT(status == NRFX_SUCCESS);
 
     status = nrfx_saadc_channel_config(&m_single_channel);
@@ -198,7 +203,7 @@ void adc_calibrate_and_start() {
 
     uint32_t channel_mask = nrfx_saadc_channels_configured_get();
     status = nrfx_saadc_advanced_mode_set(channel_mask,
-                                          RESOLUTION,
+                                          NRF_SAADC_RESOLUTION_12BIT,
                                           &adv_config,
                                           saadc_handler);
     NRFX_ASSERT(status == NRFX_SUCCESS);
@@ -208,9 +213,8 @@ void adc_calibrate_and_start() {
 
     
     status = nrfx_saadc_offset_calibrate(saadc_handler);
-    NRFX_ASSERT(status == NRFX_SUCCESS);
-    
-    powerup_iopin();
+    NRFX_ASSERT(status == NRFX_SUCCESS);    
+    //powerup_iopin();
 }
 
 /**
@@ -219,26 +223,27 @@ void adc_calibrate_and_start() {
  */
 static int configureSAADC(void)
 {          
+    
+    k_mutex_init(&saadc_mutex);
     // IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_GPIOTE_INST_GET(GPIOTE_INST_IDX)), IRQ_PRIO_LOWEST,
     //             NRFX_GPIOTE_INST_HANDLER_GET(GPIOTE_INST_IDX), 0, 0);
     IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_SAADC), IRQ_PRIO_LOWEST, nrfx_saadc_irq_handler, 0, 0);
-
     
-    LOG_INF("Starting nrfx_saadc");
+    LOG_INF("mutex declared");
     
-    int err = 0;
-    err |= gpio_pin_configure(gpio1_dev, 11, GPIO_OUTPUT); 
-	if(err != 0) {
-		LOG_ERR("error configure output pin %d", err);
-	}		
+    // int err = 0;
+    // err |= gpio_pin_configure(gpio1_dev, 11, GPIO_OUTPUT); 
+	// if(err != 0) {
+	// 	LOG_ERR("error configure output pin %d", err);
+	// }		
 
     // nrfx_gpiote_t const gpiote_inst = NRFX_GPIOTE_INSTANCE(GPIOTE_INST_IDX);
-    // status = nrfx_gpiote_init(&gpiote_inst, NRFX_GPIOTE_DEFAULT_CONFIG_IRQ_PRIORITY);
+    // status = nrfx_gpiote_init(&gpiote_inst, NRFX_GPIOTE_DEFAULT_CONFIG_IRQ_PRIORITY);`
     // NRFX_ASSERT(status == NRFX_SUCCESS);
     // LOG_INF("GPIOTE status: %s", nrfx_gpiote_init_check(&gpiote_inst) ? "initialized" : "not initialized");
 
     // pin_on_event_toggle_setup(&gpiote_inst, OUT_GPIO_PIN,
-    //                           nrf_saadc_event_address_get(NRF_SAADC, NRF_SAADC_EVENT_RESULTDONE));    
+    //                            nrf_saadc_event_address_get(NRF_SAADC, NRF_SAADC_EVENT_RESULTDONE));    
     return 0;
 }
 
