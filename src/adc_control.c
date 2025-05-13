@@ -171,8 +171,8 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
 {                                                                               \
     .oversampling      = NRF_SAADC_OVERSAMPLE_256X,                         \
     .burst             = NRF_SAADC_BURST_DISABLED,                              \
-    .internal_timer_cc = 0,                                                     \
-    .start_on_end      = false,\
+    .internal_timer_cc = INTERNAL_TIMER_CC,                                                     \
+    .start_on_end      = true,\
 }
 
  
@@ -197,9 +197,8 @@ void adc_calibrate_and_start() {
     status = nrfx_saadc_channel_config(&m_single_channel);
     NRFX_ASSERT(status == NRFX_SUCCESS);
 
-    nrfx_saadc_adv_config_t adv_config = NRFX_SAADC_BB_CONFIG;
-    adv_config.internal_timer_cc = INTERNAL_TIMER_CC;
-    adv_config.start_on_end = true;
+    nrfx_saadc_adv_config_t adv_config = NRFX_SAADC_BB_CONFIG;    
+    
 
     uint32_t channel_mask = nrfx_saadc_channels_configured_get();
     status = nrfx_saadc_advanced_mode_set(channel_mask,

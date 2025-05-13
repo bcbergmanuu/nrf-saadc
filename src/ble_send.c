@@ -156,6 +156,7 @@ static struct bt_gatt_cb gatt_callbacks = {
 
 
 
+static struct bt_conn *current_conn = NULL;
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	if (err) {
@@ -163,6 +164,12 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	} else {
 		isConnected = true;
 		LOG_INF("Connected\n");
+		current_conn = bt_conn_ref(conn);
+		/* Request updated connection parameters with shorter supervision timeout */
+        int ret = bt_conn_le_param_update(conn, BT_LE_CONN_PARAM_DEFAULT);
+		if(ret != 0) {
+			LOG_ERR("error updating connection params %d", ret);
+		}
 	}
 }
 
@@ -171,6 +178,10 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	LOG_INF("Disconnected (reason 0x%02x)\n", reason);
 	isConnected = false;
 	notify_ble_resp_on1 = false;
+	if (current_conn) {
+		bt_conn_unref(current_conn);
+		current_conn = NULL;
+	}
 	k_work_submit(&work_ble_notify_changed);
 }
 
@@ -180,10 +191,16 @@ static void le_data_length_updated(struct bt_conn *conn, struct bt_conn_le_data_
 	       info->tx_max_time, info->rx_max_len, info->rx_max_time);
 }
 
+static void param_updated(struct bt_conn *conn, uint16_t interval,
+				 uint16_t latency, uint16_t timeout) {
+					LOG_INF("interval: %d, latency %d, timeout %d", interval, latency, timeout);
+				 }
+
 BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.connected = connected,
 	.disconnected = disconnected,
 	.le_data_len_updated = le_data_length_updated,
+	.le_param_updated = param_updated,
 };
 
 static void resp_readmotion_data_notify_changed(const struct bt_gatt_attr *attr, uint16_t value) {
@@ -209,7 +226,7 @@ static ssize_t ppi_buffer_read(struct bt_conn *conn, const struct bt_gatt_attr *
 	return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(ppi_state_buff));
 }
 
-
+BT_CONN_CB_DEFINE(bt_callback);
 
 static void bt_ready(void)
 {
@@ -227,8 +244,10 @@ static void bt_ready(void)
 		return;
 	}
 
-	LOG_INF("Advertising successfully started\n");
+	LOG_INF("Advertising successfully started\n");	
 }
+
+
 
 static void auth_cancel(struct bt_conn *conn)
 {

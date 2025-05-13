@@ -55,8 +55,7 @@ class datacollector:
                 print(f'device found:{d}')                
                 the_reader = uutrack_reader()
                 await the_reader.makeconnectiontodevice(d)
-                
-                    
+                                    
 
 def main(): 
     collectior = datacollector()

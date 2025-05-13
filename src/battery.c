@@ -145,7 +145,7 @@ int battery_init()
     ret |= gpio_pin_configure(gpio_battery_dev, GPIO_BATTERY_READ_ENABLE, GPIO_OUTPUT | GPIO_ACTIVE_LOW);
     ret |= gpio_pin_configure(gpio_battery_dev, GPIO_BATTERY_CHARGE_SPEED, GPIO_OUTPUT | GPIO_ACTIVE_LOW);
     ret |= gpio_pin_set(gpio_battery_dev, GPIO_BATTERY_CHARGE_SPEED, 1); // FAST charge 100mA    
-    k_timer_start(&battery_sample_timer, K_NO_WAIT, K_SECONDS(2));
+    k_timer_start(&battery_sample_timer, K_NO_WAIT, K_MINUTES(2));
     
     if(ret != 0) {
         LOG_ERR("error, %d", ret);
